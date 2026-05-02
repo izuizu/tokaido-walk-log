@@ -25,6 +25,7 @@
           <p class="eyebrow">Tokaido Walk Log</p>
           <h1>東海道五十三次</h1>
           <p class="subtitle">日本橋から三条大橋まで、歩いた軌跡を少しずつ重ねていく記録帳。</p>
+          <p id="routeSource" class="route-source">ルート: 宿場間の概略線を表示中</p>
         </header>
 
         <section class="status-grid" aria-label="現在の状態">
@@ -35,6 +36,14 @@
           <div>
             <span>記録距離</span>
             <strong id="trackDistance">0.00 km</strong>
+          </div>
+          <div>
+            <span>手入力距離</span>
+            <strong id="manualDistance">0.00 km</strong>
+          </div>
+          <div>
+            <span>登録区間</span>
+            <strong id="manualCount">0</strong>
           </div>
           <div>
             <span>記録点</span>
@@ -55,6 +64,40 @@
         <section class="exports" aria-label="データ書き出し">
           <button id="exportGpxButton" type="button">GPXを書き出し</button>
           <button id="exportJsonButton" type="button">JSONを書き出し</button>
+        </section>
+
+        <section class="manual-form" aria-label="あとから歩行記録を追加">
+          <h2>あとから追加</h2>
+          <div class="field-grid">
+            <label>
+              日付
+              <input id="manualDate" type="date" />
+            </label>
+            <label>
+              距離 km
+              <input id="manualDistanceInput" type="number" min="0" step="0.1" placeholder="任意" />
+            </label>
+          </div>
+          <div class="field-grid">
+            <label>
+              出発
+              <select id="manualFrom"></select>
+            </label>
+            <label>
+              到着
+              <select id="manualTo"></select>
+            </label>
+          </div>
+          <label>
+            メモ
+            <textarea id="manualNote" rows="3" placeholder="例: 2024年春に小田原宿から箱根宿まで。記録開始を忘れた分。"></textarea>
+          </label>
+          <button id="addManualButton" class="primary" type="button">歩いた区間を追加</button>
+        </section>
+
+        <section class="manual-list" aria-label="あとから追加した歩行記録">
+          <h2>追加した記録</h2>
+          <ul id="manualWalks"></ul>
         </section>
 
         <section class="log-form" aria-label="歩行メモ">
