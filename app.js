@@ -62,6 +62,8 @@ let watchId = null;
 let currentMarker = null;
 let trackLine = null;
 let trackPoints = [];
+let manualWalks = [];
+let manualLines = [];
 let nearestStationIndex = -1;
 
 const map = L.map("map", { zoomControl: false }).setView([35.1, 137.7], 8);
@@ -73,11 +75,13 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 const routeLatLngs = stations.map((station) => [station.lat, station.lng]);
-const routeLine = L.polyline(routeLatLngs, {
+const fallbackRouteLine = L.polyline(routeLatLngs, {
   color: "#0f766e",
   weight: 5,
-  opacity: 0.82,
+  opacity: 0.38,
+  dashArray: "8 8",
 }).addTo(map);
+let routeLayer = fallbackRouteLine;
 
 stations.forEach((station, index) => {
   const label = index === 0 ? "起点" : index === stations.length - 1 ? "終点" : `${index}次`;
@@ -94,14 +98,24 @@ stations.forEach((station, index) => {
 
 const elements = {
   accuracy: document.querySelector("#accuracy"),
+  addManualButton: document.querySelector("#addManualButton"),
   clearButton: document.querySelector("#clearButton"),
   exportGpxButton: document.querySelector("#exportGpxButton"),
   exportJsonButton: document.querySelector("#exportJsonButton"),
   fitRouteButton: document.querySelector("#fitRouteButton"),
   locateButton: document.querySelector("#locateButton"),
+  manualCount: document.querySelector("#manualCount"),
+  manualDate: document.querySelector("#manualDate"),
+  manualDistance: document.querySelector("#manualDistance"),
+  manualDistanceInput: document.querySelector("#manualDistanceInput"),
+  manualFrom: document.querySelector("#manualFrom"),
+  manualNote: document.querySelector("#manualNote"),
+  manualTo: document.querySelector("#manualTo"),
+  manualWalks: document.querySelector("#manualWalks"),
   memo: document.querySelector("#walkMemo"),
   nearestStage: document.querySelector("#nearestStage"),
   pointCount: document.querySelector("#pointCount"),
+  routeSource: document.querySelector("#routeSource"),
   saveMemoButton: document.querySelector("#saveMemoButton"),
   startButton: document.querySelector("#startButton"),
   stations: document.querySelector("#stations"),
@@ -115,9 +129,11 @@ function loadState() {
   try {
     const state = JSON.parse(raw);
     trackPoints = Array.isArray(state.trackPoints) ? state.trackPoints : [];
+    manualWalks = Array.isArray(state.manualWalks) ? state.manualWalks : [];
     elements.memo.value = state.memo || "";
   } catch {
     trackPoints = [];
+    manualWalks = [];
   }
 }
 
@@ -126,10 +142,49 @@ function saveState() {
     STORAGE_KEY,
     JSON.stringify({
       memo: elements.memo.value,
+      manualWalks,
       trackPoints,
       updatedAt: new Date().toISOString(),
     }),
   );
+}
+
+async function loadDetailedRoute() {
+  try {
+    const response = await fetch("./data/tokaido-osm.geojson");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const geojson = await response.json();
+    fallbackRouteLine.remove();
+    routeLayer = L.geoJSON(geojson, {
+      style: {
+        color: "#0f766e",
+        weight: 4,
+        opacity: 0.78,
+      },
+    }).addTo(map);
+    map.attributionControl.addAttribution(
+      '<a href="https://www.openstreetmap.org/relation/5185746">旧東海道 route data © OpenStreetMap contributors</a>',
+    );
+    elements.routeSource.textContent = "ルート: OpenStreetMapの旧東海道データを表示中";
+    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+  } catch (error) {
+    elements.routeSource.textContent = "ルート: 詳細データを読めないため、宿場間の概略線を表示中";
+    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+  }
+}
+
+function setupManualForm() {
+  elements.manualDate.value = dateStamp();
+
+  stations.forEach((station, index) => {
+    const label = index === 0 || index === stations.length - 1 ? station.name : `${index}. ${station.name}`;
+    const fromOption = new Option(label, String(index));
+    const toOption = new Option(label, String(index));
+    elements.manualFrom.appendChild(fromOption);
+    elements.manualTo.appendChild(toOption);
+  });
+
+  elements.manualTo.value = "1";
 }
 
 function renderStations() {
@@ -157,6 +212,65 @@ function renderTrack() {
   const distanceKm = calculateTrackDistance() / 1000;
   elements.trackDistance.textContent = `${distanceKm.toFixed(2)} km`;
   elements.pointCount.textContent = String(trackPoints.length);
+}
+
+function renderManualWalks() {
+  manualLines.forEach((line) => line.remove());
+  manualLines = [];
+
+  const totalKm = manualWalks.reduce((sum, walk) => sum + (Number(walk.distanceKm) || 0), 0);
+  elements.manualDistance.textContent = `${totalKm.toFixed(2)} km`;
+  elements.manualCount.textContent = String(manualWalks.length);
+  elements.manualWalks.innerHTML = "";
+
+  const coveredSegments = new Set();
+  manualWalks.forEach((walk) => {
+    const start = Math.min(walk.fromIndex, walk.toIndex);
+    const end = Math.max(walk.fromIndex, walk.toIndex);
+    for (let index = start; index < end; index += 1) {
+      coveredSegments.add(index);
+    }
+  });
+
+  coveredSegments.forEach((index) => {
+    const line = L.polyline(
+      [
+        [stations[index].lat, stations[index].lng],
+        [stations[index + 1].lat, stations[index + 1].lng],
+      ],
+      { color: "#1d4ed8", weight: 8, opacity: 0.6 },
+    ).addTo(map);
+    manualLines.push(line);
+  });
+
+  if (manualWalks.length === 0) {
+    const empty = document.createElement("li");
+    empty.innerHTML = "<span>まだ追加記録はありません。</span>";
+    elements.manualWalks.appendChild(empty);
+    return;
+  }
+
+  [...manualWalks]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .forEach((walk) => {
+      const item = document.createElement("li");
+      const estimated = walk.distanceSource === "estimated" ? " 概算" : "";
+      const distance = walk.distanceKm ? ` / ${Number(walk.distanceKm).toFixed(1)} km${estimated}` : "";
+      const note = walk.note ? `<span>${escapeHtml(walk.note)}</span>` : "";
+      item.innerHTML = `
+        <div>
+          <strong>${escapeHtml(walk.date)} ${escapeHtml(stations[walk.fromIndex].name)} → ${escapeHtml(stations[walk.toIndex].name)}${distance}</strong>
+          ${note}
+        </div>
+      `;
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.textContent = "削除";
+      deleteButton.addEventListener("click", () => deleteManualWalk(walk.id));
+      item.appendChild(deleteButton);
+      elements.manualWalks.appendChild(item);
+    });
 }
 
 function updatePosition(position) {
@@ -211,6 +325,62 @@ function updateNearestStage(point) {
   renderStations();
 }
 
+function addManualWalk() {
+  const fromIndex = Number(elements.manualFrom.value);
+  const toIndex = Number(elements.manualTo.value);
+  const inputDistanceKm = Number(elements.manualDistanceInput.value);
+  const hasInputDistance = elements.manualDistanceInput.value !== "";
+  const distanceKm =
+    hasInputDistance && Number.isFinite(inputDistanceKm) && inputDistanceKm > 0
+      ? inputDistanceKm
+      : calculateStationDistance(fromIndex, toIndex) / 1000;
+
+  if (!elements.manualDate.value) {
+    alert("日付を入れてください。");
+    return;
+  }
+
+  if (fromIndex === toIndex) {
+    alert("出発と到着は別の宿場を選んでください。");
+    return;
+  }
+
+  manualWalks.push({
+    id: globalThis.crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    date: elements.manualDate.value,
+    fromIndex,
+    toIndex,
+    distanceKm,
+    distanceSource: hasInputDistance ? "manual" : "estimated",
+    note: elements.manualNote.value.trim(),
+    createdAt: new Date().toISOString(),
+  });
+
+  elements.manualDistanceInput.value = "";
+  elements.manualNote.value = "";
+  elements.manualFrom.value = String(toIndex);
+  elements.manualTo.value = String(Math.min(toIndex + 1, stations.length - 1));
+  saveState();
+  renderManualWalks();
+}
+
+function calculateStationDistance(fromIndex, toIndex) {
+  const start = Math.min(fromIndex, toIndex);
+  const end = Math.max(fromIndex, toIndex);
+  let distance = 0;
+  for (let index = start; index < end; index += 1) {
+    distance += haversine(stations[index], stations[index + 1]);
+  }
+  return distance;
+}
+
+function deleteManualWalk(id) {
+  if (!confirm("この追加記録を削除しますか？")) return;
+  manualWalks = manualWalks.filter((walk) => walk.id !== id);
+  saveState();
+  renderManualWalks();
+}
+
 function calculateTrackDistance() {
   return trackPoints.reduce((sum, point, index) => {
     if (index === 0) return 0;
@@ -232,6 +402,15 @@ function haversine(a, b) {
 
 function toRad(value) {
   return (value * Math.PI) / 180;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function startTracking() {
@@ -278,7 +457,7 @@ function exportJson() {
   saveState();
   download(
     `tokaido-walk-${dateStamp()}.json`,
-    JSON.stringify({ stations, trackPoints, memo: elements.memo.value }, null, 2),
+    JSON.stringify({ stations, trackPoints, manualWalks, memo: elements.memo.value }, null, 2),
     "application/json",
   );
 }
@@ -312,7 +491,7 @@ function dateStamp() {
 }
 
 elements.fitRouteButton.addEventListener("click", () => {
-  map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+  map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
 });
 
 elements.locateButton.addEventListener("click", () => {
@@ -329,11 +508,14 @@ elements.clearButton.addEventListener("click", () => {
   saveState();
   renderTrack();
 });
+elements.addManualButton.addEventListener("click", addManualWalk);
 elements.exportGpxButton.addEventListener("click", exportGpx);
 elements.exportJsonButton.addEventListener("click", exportJson);
 elements.saveMemoButton.addEventListener("click", saveState);
 
+setupManualForm();
 loadState();
 renderStations();
 renderTrack();
-map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+renderManualWalks();
+loadDetailedRoute();
