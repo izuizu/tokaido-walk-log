@@ -34,6 +34,8 @@ body {
 }
 
 button,
+input,
+select,
 textarea {
   font: inherit;
 }
@@ -130,6 +132,12 @@ h2 {
   line-height: 1.7;
 }
 
+.route-source {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -174,11 +182,13 @@ h2 {
   color: #ffffff;
 }
 
+.manual-form,
 .log-form {
   display: grid;
   gap: 10px;
 }
 
+.manual-form label,
 .log-form label {
   display: grid;
   gap: 8px;
@@ -187,15 +197,69 @@ h2 {
   font-weight: 700;
 }
 
+input,
+select,
 textarea {
   width: 100%;
-  resize: vertical;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
   color: var(--ink);
   background: #ffffff;
   line-height: 1.6;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.manual-list {
+  display: grid;
+  gap: 10px;
+}
+
+.manual-list ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manual-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.manual-list strong {
+  display: block;
+  font-size: 14px;
+}
+
+.manual-list span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.manual-list button {
+  min-height: 34px;
+  padding: 0 9px;
+  color: var(--muted);
 }
 
 .station-list {
@@ -252,7 +316,8 @@ textarea {
 
   .status-grid,
   .controls,
-  .exports {
+  .exports,
+  .field-grid {
     grid-template-columns: 1fr;
   }
 }
