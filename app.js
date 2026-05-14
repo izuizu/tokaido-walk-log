@@ -58,6 +58,15 @@ const stations = [
   { name: "三条大橋", lat: 35.0107, lng: 135.7746 },
 ];
 
+const MIYA_STATION_INDEX = stations.findIndex((station) => station.name === "宮宿");
+const KUWANA_STATION_INDEX = stations.findIndex((station) => station.name === "桑名宿");
+const ferryRouteLatLngs = [
+  [stations[MIYA_STATION_INDEX].lat, stations[MIYA_STATION_INDEX].lng],
+  [35.105, 136.845],
+  [35.083, 136.765],
+  [stations[KUWANA_STATION_INDEX].lat, stations[KUWANA_STATION_INDEX].lng],
+];
+
 let watchId = null;
 let currentMarker = null;
 let trackLine = null;
@@ -82,6 +91,17 @@ const fallbackRouteLine = L.polyline(routeLatLngs, {
   dashArray: "8 8",
 }).addTo(map);
 let routeLayer = fallbackRouteLine;
+
+const ferryLine = L.polyline(ferryRouteLatLngs, {
+  color: "#2563eb",
+  weight: 4,
+  opacity: 0.72,
+  dashArray: "4 10",
+}).addTo(map);
+
+ferryLine.bindPopup(
+  "<strong>七里の渡し</strong><br>宮宿から桑名宿へ渡った海上区間です。旧東海道の陸路データとは別に点線で表示しています。",
+);
 
 stations.forEach((station, index) => {
   const label = index === 0 ? "起点" : index === stations.length - 1 ? "終点" : `${index}次`;
@@ -165,11 +185,13 @@ async function loadDetailedRoute() {
     map.attributionControl.addAttribution(
       '<a href="https://www.openstreetmap.org/relation/5185746">旧東海道 route data © OpenStreetMap contributors</a>',
     );
-    elements.routeSource.textContent = "ルート: OpenStreetMapの旧東海道データを表示中";
-    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+    elements.routeSource.textContent =
+      "ルート: OpenStreetMapの旧東海道データと七里の渡しを表示中";
+    fitWholeRoute();
   } catch (error) {
-    elements.routeSource.textContent = "ルート: 詳細データを読めないため、宿場間の概略線を表示中";
-    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+    elements.routeSource.textContent =
+      "ルート: 詳細データを読めないため、宿場間の概略線と七里の渡しを表示中";
+    fitWholeRoute();
   }
 }
 
@@ -233,13 +255,14 @@ function renderManualWalks() {
   });
 
   coveredSegments.forEach((index) => {
-    const line = L.polyline(
-      [
-        [stations[index].lat, stations[index].lng],
-        [stations[index + 1].lat, stations[index + 1].lng],
-      ],
-      { color: "#1d4ed8", weight: 8, opacity: 0.6 },
-    ).addTo(map);
+    const latLngs =
+      index === MIYA_STATION_INDEX
+        ? ferryRouteLatLngs
+        : [
+            [stations[index].lat, stations[index].lng],
+            [stations[index + 1].lat, stations[index + 1].lng],
+          ];
+    const line = L.polyline(latLngs, { color: "#1d4ed8", weight: 8, opacity: 0.6 }).addTo(map);
     manualLines.push(line);
   });
 
@@ -490,8 +513,16 @@ function dateStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function getWholeRouteBounds() {
+  return L.featureGroup([routeLayer, ferryLine]).getBounds();
+}
+
+function fitWholeRoute() {
+  map.fitBounds(getWholeRouteBounds(), { padding: [30, 30] });
+}
+
 elements.fitRouteButton.addEventListener("click", () => {
-  map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+  fitWholeRoute();
 });
 
 elements.locateButton.addEventListener("click", () => {
